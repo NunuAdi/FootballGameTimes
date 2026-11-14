@@ -7,7 +7,7 @@ import SettingsModal from './components/SettingsModal.jsx'
 import { useMatchTimer } from './hooks/useMatchTimer.js'
 import { useRemoteTrigger } from './hooks/useRemoteTrigger.js'
 import { useWakeLock } from './hooks/useWakeLock.js'
-import { configureAudio } from './lib/audio.js'
+import { configureAudio, loadAudioUnlocked } from './lib/audio.js'
 import { COPY, getStatusLabel } from './lib/hebrew.js'
 import { extraButtonLabel, loadSettings, matchTitle, sanitizeSettings, saveSettings } from './lib/settings.js'
 import { setWakeLockWanted } from './lib/wakeLock.js'
@@ -19,9 +19,9 @@ export default function App() {
     return initial
   })
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const match = useMatchTimer(settings.matchMinutes)
+  const match = useMatchTimer(settings.matchSeconds)
   const wakeStatus = useWakeLock(match.isRunning)
-  const [audioReady, setAudioReady] = useState(false)
+  const [audioReady, setAudioReady] = useState(() => loadAudioUnlocked())
   const actionLock = useRef(0)
   const extraLock = useRef(0)
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -58,6 +58,7 @@ export default function App() {
 
   function onToggle() {
     if (!audioReady || match.ended || settingsOpen) return
+    match.armAudio()
     runAction(() => {
       const next = match.toggle()
       setWakeLockWanted(Boolean(next.isRunning))
@@ -68,7 +69,19 @@ export default function App() {
     const timestamp = Date.now()
     if (timestamp - extraLock.current < 400) return
     extraLock.current = timestamp
+    if (audioReady) match.armAudio({ flush: false })
     match.addExtra(settings.extraSeconds * 1000)
+  }
+
+  function onSurfaceGesture(event) {
+    if (!audioReady) return
+    const element = event.target instanceof Element ? event.target : event.target?.parentElement
+    const inSettings = Boolean(
+      element?.closest?.('[data-testid="settings-dialog"]')
+      || element?.querySelector?.('[data-testid="settings-dialog"]'),
+    )
+    const skipFlush = Boolean(element?.closest?.('[data-testid="extra-time"]') || inSettings)
+    match.armAudio({ flush: !skipFlush })
   }
 
   useRemoteTrigger(() => {
@@ -76,6 +89,7 @@ export default function App() {
       onUnlock()
       return
     }
+    match.armAudio()
     onToggle()
   }, !settingsOpen)
 
@@ -86,7 +100,12 @@ export default function App() {
   const showWakeWarning = match.isRunning && (wakeStatus === 'denied' || wakeStatus === 'unsupported')
 
   return (
-    <div dir="rtl" className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-slate-950 text-white">
+    <div
+      dir="rtl"
+      onPointerDownCapture={onSurfaceGesture}
+      onClickCapture={onSurfaceGesture}
+      className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-slate-950 text-white"
+    >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(0,245,212,0.16),transparent_56%)]" />
       {match.alarm && (
         <motion.div
@@ -179,7 +198,6 @@ export default function App() {
       {settingsOpen && (
         <SettingsModal
           settings={settings}
-          durationLocked={!match.pristine}
           onChange={updateSettings}
           onClose={() => setSettingsOpen(false)}
         />

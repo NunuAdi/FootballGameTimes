@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { isAudioUnlocked, playMatchCue, stopMatchAudio, unlockAudio } from '../lib/audio.js'
+import { isAudioUnlocked, playMatchCue, resumeAudioForGesture, stopMatchAudio, unlockAudio } from '../lib/audio.js'
 import { loadState, saveState } from '../lib/storage.js'
 import {
   addMatchTime,
@@ -15,17 +15,17 @@ import {
   toggleTimer,
 } from '../lib/timer.js'
 
-function buildInitial(matchMinutes) {
+function buildInitial(matchSeconds) {
   const timestamp = Date.now()
   const loaded = loadState(timestamp)
-  const preferred = matchMinutes * 60 * 1000
+  const preferred = matchSeconds * 1000
   const pristine = !loaded.isRunning && !loaded.ended && loaded.baseElapsedMs === 0
   return { state: pristine ? createInitialState(preferred) : loaded, now: timestamp }
 }
 
-export function useMatchTimer(matchMinutes) {
-  const [{ state, now }, setSnapshot] = useState(() => buildInitial(matchMinutes))
-  const minutesRef = useRef(matchMinutes)
+export function useMatchTimer(matchSeconds) {
+  const [{ state, now }, setSnapshot] = useState(() => buildInitial(matchSeconds))
+  const durationRef = useRef(matchSeconds)
   const stateRef = useRef(state)
   const pendingRef = useRef(null)
   const alarmTimer = useRef(0)
@@ -89,13 +89,15 @@ export function useMatchTimer(matchMinutes) {
   }, [state.isRunning, tick])
 
   useEffect(() => {
-    minutesRef.current = matchMinutes
-    const current = stateRef.current
-    const nextDuration = matchMinutes * 60 * 1000
-    if (current.isRunning || current.ended || current.baseElapsedMs > 0) return
-    if (current.durationMs === nextDuration) return
-    commit(createInitialState(nextDuration), Date.now())
-  }, [matchMinutes, commit])
+    const previous = durationRef.current
+    durationRef.current = matchSeconds
+    if (previous === matchSeconds) return
+    stopMatchAudio()
+    pendingRef.current = null
+    window.clearTimeout(alarmTimer.current)
+    setAlarm(false)
+    commit(createInitialState(matchSeconds * 1000), Date.now())
+  }, [matchSeconds, commit])
 
   const toggle = useCallback(() => {
     const timestamp = Date.now()
@@ -112,7 +114,7 @@ export function useMatchTimer(matchMinutes) {
     window.clearTimeout(alarmTimer.current)
     setAlarm(false)
     navigator.vibrate?.(35)
-    commit(createInitialState(minutesRef.current * 60 * 1000), Date.now())
+    commit(createInitialState(durationRef.current * 1000), Date.now())
   }, [commit])
 
   const addExtra = useCallback((extraMs) => {
@@ -126,6 +128,20 @@ export function useMatchTimer(matchMinutes) {
     commit(next, timestamp)
     tick(timestamp)
   }, [commit, tick])
+
+  const armAudio = useCallback(({ flush = true } = {}) => {
+    const pending = pendingRef.current
+    resumeAudioForGesture()
+    if (!flush || !pending || !playMatchCue(pending)) return stateRef.current
+    pendingRef.current = null
+    let next = { ...stateRef.current, announced: markCue(stateRef.current.announced, pending) }
+    if (pending.type === 'end') {
+      next = { ...finishMatch(next), announced: next.announced }
+      triggerAlarm()
+    }
+    commit(next, Date.now())
+    return stateRef.current
+  }, [commit, triggerAlarm])
 
   const activate = useCallback(() => {
     const pending = pendingRef.current
@@ -166,6 +182,7 @@ export function useMatchTimer(matchMinutes) {
     toggle,
     reset,
     activate,
+    armAudio,
     addExtra,
   }
 }

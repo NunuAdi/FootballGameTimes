@@ -1,4 +1,6 @@
 export const MATCH_LENGTHS = [5, 7, 10]
+export const MIN_MATCH_SECONDS = 60
+export const MAX_MATCH_SECONDS = 30 * 60
 
 export const EXTRA_OPTIONS = [
   { seconds: 30, label: '30 שנ׳' },
@@ -7,7 +9,7 @@ export const EXTRA_OPTIONS = [
 ]
 
 export const DEFAULT_SETTINGS = {
-  matchMinutes: 7,
+  matchSeconds: 7 * 60,
   extraSeconds: 60,
   speechEnabled: true,
   volume: 1,
@@ -15,8 +17,27 @@ export const DEFAULT_SETTINGS = {
 
 export const SETTINGS_KEY = 'fgt-settings-v1'
 
+function clampMatchSeconds(total) {
+  return Math.min(MAX_MATCH_SECONDS, Math.max(MIN_MATCH_SECONDS, Math.round(total)))
+}
+
+export function matchSecondsFrom(raw) {
+  const direct = Number(raw?.matchSeconds)
+  if (Number.isFinite(direct)) return clampMatchSeconds(direct)
+  if (MATCH_LENGTHS.includes(raw?.matchMinutes)) return raw.matchMinutes * 60
+  return DEFAULT_SETTINGS.matchSeconds
+}
+
+/** Minutes and seconds fields become a match length between 1:00 and 30:00. */
+export function parseMatchDuration(minutesText, secondsText) {
+  const minutes = Number(String(minutesText ?? '').replace(/\D/g, '')) || 0
+  let seconds = Number(String(secondsText ?? '').replace(/\D/g, '')) || 0
+  if (seconds > 59) seconds = 59
+  return clampMatchSeconds(minutes * 60 + seconds)
+}
+
 export function sanitizeSettings(raw) {
-  const matchMinutes = MATCH_LENGTHS.includes(raw?.matchMinutes) ? raw.matchMinutes : DEFAULT_SETTINGS.matchMinutes
+  const matchSeconds = matchSecondsFrom(raw)
   const extraSeconds = EXTRA_OPTIONS.some((option) => option.seconds === raw?.extraSeconds)
     ? raw.extraSeconds
     : DEFAULT_SETTINGS.extraSeconds
@@ -24,7 +45,7 @@ export function sanitizeSettings(raw) {
   let volume = Number(raw?.volume)
   if (!Number.isFinite(volume)) volume = DEFAULT_SETTINGS.volume
   volume = Math.min(1, Math.max(0, volume))
-  return { matchMinutes, extraSeconds, speechEnabled, volume }
+  return { matchSeconds, extraSeconds, speechEnabled, volume }
 }
 
 export function loadSettings() {

@@ -1,12 +1,25 @@
-import { COPY, SECOND_WORDS, SPEECH_RATE } from './hebrew.js'
+import { COPY, SECOND_WORDS, SPEECH_PITCH, SPEECH_RATE } from './hebrew.js'
+import { selectHebrewMaleVoice } from './speechVoice.js'
 
 const BUZZER_SECONDS = 3
+const BUZZER_URL = `${import.meta.env.BASE_URL}buzzer.mp3`
 let context = null
 let output = null
 let unlocked = false
+let speechPrimed = false
+let voicesWatching = false
+let selectedVoice = null
 let speakTimer = 0
 let stopBuzzer = null
+let hornGeneration = 0
+let buzzerBytes = null
+let buzzerBytesLoad = null
+let buzzerBuffer = null
+let buzzerDecode = null
+let buzzerElement = null
+let htmlHornActive = false
 const timeouts = new Set()
+export const AUDIO_UNLOCK_KEY = 'fgt-audio-unlocked'
 const audioSettings = {
   speechEnabled: true,
   volume: 1,
@@ -17,11 +30,70 @@ export function configureAudio({ speechEnabled, volume } = {}) {
   if (typeof volume === 'number' && Number.isFinite(volume)) {
     audioSettings.volume = Math.min(1, Math.max(0, volume))
     if (output) output.gain.value = audioSettings.volume
+    if (buzzerElement) buzzerElement.volume = audioSettings.volume
   }
 }
 
 export function isAudioUnlocked() {
   return unlocked
+}
+
+export function loadAudioUnlocked() {
+  try {
+    return localStorage.getItem(AUDIO_UNLOCK_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
+function persistAudioUnlocked() {
+  try {
+    localStorage.setItem(AUDIO_UNLOCK_KEY, 'true')
+  } catch {
+    // Private mode can block storage; this visit still unlocks.
+  }
+}
+
+function refreshHebrewVoice() {
+  const voices = window.speechSynthesis?.getVoices?.() ?? []
+  if (!voices.length) return
+  selectedVoice = selectHebrewMaleVoice(voices)
+}
+
+function watchHebrewVoices() {
+  const synth = window.speechSynthesis
+  if (!synth) return
+  refreshHebrewVoice()
+  if (voicesWatching) return
+  voicesWatching = true
+  const onChange = () => refreshHebrewVoice()
+  try {
+    synth.addEventListener('voiceschanged', onChange)
+  } catch {
+    // Older Safari only supports the onvoiceschanged property.
+  }
+  const previous = synth.onvoiceschanged
+  synth.onvoiceschanged = (event) => {
+    if (typeof previous === 'function') previous.call(synth, event)
+    onChange()
+  }
+}
+
+function primeSilentSpeech() {
+  if (speechPrimed || !audioSettings.speechEnabled) return
+  const synth = window.speechSynthesis
+  if (!synth) return
+  speechPrimed = true
+  try {
+    synth.resume()
+    const utterance = new SpeechSynthesisUtterance('\u00a0')
+    utterance.lang = 'he-IL'
+    utterance.volume = 0
+    utterance.rate = 1
+    synth.speak(utterance)
+  } catch {
+    speechPrimed = false
+  }
 }
 
 function getAudioContext() {
@@ -48,10 +120,9 @@ function outputNode(audio) {
 }
 
 function hebrewVoice() {
-  const voices = window.speechSynthesis?.getVoices?.() ?? []
-  return voices.find((voice) => voice.lang?.toLowerCase() === 'he-il')
-    || voices.find((voice) => voice.lang?.toLowerCase().startsWith('he'))
-    || null
+  watchHebrewVoices()
+  if (selectedVoice) return selectedVoice
+  return selectHebrewMaleVoice(window.speechSynthesis?.getVoices?.() ?? [])
 }
 
 function clearSpeakTimer() {
@@ -60,6 +131,7 @@ function clearSpeakTimer() {
 }
 
 export function stopMatchAudio() {
+  hornGeneration += 1
   for (const id of timeouts) window.clearTimeout(id)
   timeouts.clear()
   clearSpeakTimer()
@@ -80,17 +152,21 @@ export function speak(text, rate = SPEECH_RATE) {
   const synth = window.speechSynthesis
   if (!audioSettings.speechEnabled || !synth || !text) return
   clearSpeakTimer()
+  speechPrimed = true
   synth.resume()
   synth.cancel()
   const utterance = new SpeechSynthesisUtterance(text)
   utterance.lang = 'he-IL'
   utterance.rate = rate
-  utterance.pitch = 1
+  utterance.pitch = SPEECH_PITCH
   utterance.volume = 1
   const voice = hebrewVoice()
   if (voice) utterance.voice = voice
   // iOS drops an utterance spoken in the same turn as cancel().
+  // Voices can arrive during that gap, so the voice is chosen again.
   speakTimer = window.setTimeout(() => {
+    const ready = hebrewVoice()
+    if (ready) utterance.voice = ready
     synth.resume()
     synth.speak(utterance)
   }, 60)
@@ -257,16 +333,170 @@ function playBuzzer() {
   navigator.vibrate?.([180, 70, 180, 70, 420])
 }
 
+function fetchBuzzerBytes() {
+  if (typeof window === 'undefined') return Promise.reject(new Error('no window'))
+  if (buzzerBytes) return Promise.resolve(buzzerBytes)
+  if (buzzerBytesLoad) return buzzerBytesLoad
+  buzzerBytesLoad = fetch(BUZZER_URL)
+    .then((response) => {
+      if (!response.ok) throw new Error(String(response.status))
+      return response.arrayBuffer()
+    })
+    .then((bytes) => {
+      buzzerBytes = bytes
+      return bytes
+    })
+    .catch((error) => {
+      buzzerBytesLoad = null
+      throw error
+    })
+  return buzzerBytesLoad
+}
+
+function decodeBuzzer() {
+  if (buzzerBuffer) return Promise.resolve(buzzerBuffer)
+  if (buzzerDecode) return buzzerDecode
+  const audio = getAudioContext()
+  buzzerDecode = fetchBuzzerBytes()
+    .then((bytes) => audio.decodeAudioData(bytes.slice(0)))
+    .then((buffer) => {
+      buzzerBuffer = buffer
+      return buffer
+    })
+    .catch((error) => {
+      buzzerDecode = null
+      throw error
+    })
+  return buzzerDecode
+}
+
+function primeBuzzerElement() {
+  if (typeof Audio === 'undefined') return
+  if (!buzzerElement) {
+    buzzerElement = new Audio(BUZZER_URL)
+    buzzerElement.preload = 'auto'
+    buzzerElement.playsInline = true
+  }
+  buzzerElement.volume = 0
+  const attempt = buzzerElement.play()
+  const finish = () => {
+    if (htmlHornActive) return
+    buzzerElement.pause()
+    try { buzzerElement.currentTime = 0 } catch { /* not seekable yet */ }
+    buzzerElement.volume = audioSettings.volume
+  }
+  if (attempt?.then) attempt.then(finish).catch(() => {})
+  else finish()
+}
+
+function armCustomBuzzer(resumed) {
+  primeBuzzerElement()
+  Promise.resolve(resumed).then(() => decodeBuzzer()).catch(() => {})
+}
+
+function vibrateEnd() {
+  navigator.vibrate?.([180, 70, 180, 70, 420])
+}
+
+function startBufferedHorn(audio, buffer) {
+  const source = audio.createBufferSource()
+  const gain = audio.createGain()
+  gain.gain.setValueAtTime(1, audio.currentTime)
+  source.buffer = buffer
+  source.connect(gain)
+  gain.connect(outputNode(audio))
+  source.start()
+  const stop = () => {
+    try { source.stop() } catch { /* already ended */ }
+    if (stopBuzzer === stop) stopBuzzer = null
+  }
+  stopBuzzer = stop
+  source.onended = () => {
+    if (stopBuzzer === stop) stopBuzzer = null
+  }
+  vibrateEnd()
+}
+
+function playHtmlHorn() {
+  if (!buzzerElement) return null
+  htmlHornActive = true
+  buzzerElement.volume = audioSettings.volume
+  try { buzzerElement.currentTime = 0 } catch { /* not seekable yet */ }
+  const pending = buzzerElement.play()
+  const stop = () => {
+    htmlHornActive = false
+    buzzerElement.pause()
+    try { buzzerElement.currentTime = 0 } catch { /* already reset */ }
+    if (stopBuzzer === stop) stopBuzzer = null
+  }
+  stopBuzzer = stop
+  vibrateEnd()
+  return Promise.resolve(pending)
+}
+
+function playEndHorn() {
+  const generation = hornGeneration
+  const stale = () => generation !== hornGeneration
+  const audio = resumeContext()
+  if (buzzerBuffer) {
+    startBufferedHorn(audio, buzzerBuffer)
+    return
+  }
+  decodeBuzzer()
+    .then((buffer) => {
+      if (stale()) return
+      startBufferedHorn(resumeContext(), buffer)
+    })
+    .catch(() => {
+      if (stale()) return
+      const html = playHtmlHorn()
+      if (!html) {
+        playBuzzer()
+        return
+      }
+      html.catch(() => {
+        if (stale()) return
+        stopBuzzer?.()
+        playBuzzer()
+      })
+    })
+}
+
+if (typeof window !== 'undefined') {
+  fetchBuzzerBytes().catch(() => {})
+  watchHebrewVoices()
+}
+
 export function unlockAudio({ primeSpeech = true } = {}) {
   const audio = getAudioContext()
   unlocked = true
+  persistAudioUnlocked()
   const resumed = audio.resume()
+  armCustomBuzzer(resumed)
   resumed.then(() => playTick()).catch(() => {})
-  if (primeSpeech) speak(COPY.readySpeech)
-  if (window.speechSynthesis) {
-    window.speechSynthesis.addEventListener('voiceschanged', () => hebrewVoice(), { once: true })
+  if (primeSpeech) {
+    speechPrimed = true
+    speak(COPY.readySpeech)
   }
+  watchHebrewVoices()
   return resumed
+}
+
+// A reloaded page suspends AudioContext until a gesture, even when the overlay stays hidden.
+export function resumeAudioForGesture() {
+  try {
+    const audio = getAudioContext()
+    unlocked = true
+    const resumed = audio.resume()
+    armCustomBuzzer(resumed)
+    resumed.catch(() => {})
+    if (!speechPrimed) primeSilentSpeech()
+    else window.speechSynthesis?.resume?.()
+    watchHebrewVoices()
+    return resumed
+  } catch {
+    return Promise.resolve()
+  }
 }
 
 export function playMatchCue(cue) {
@@ -283,7 +513,7 @@ export function playMatchCue(cue) {
     speak(SECOND_WORDS[cue.second], SPEECH_RATE)
   } else if (cue.type === 'end') {
     stopMatchAudio()
-    playBuzzer()
+    playEndHorn()
   }
   return true
 }

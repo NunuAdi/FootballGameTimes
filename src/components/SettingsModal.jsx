@@ -1,10 +1,19 @@
 import { motion } from 'framer-motion'
 import { X } from 'lucide-react'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { COPY } from '../lib/hebrew.js'
-import { EXTRA_OPTIONS, MATCH_LENGTHS } from '../lib/settings.js'
+import { EXTRA_OPTIONS, MATCH_LENGTHS, parseMatchDuration } from '../lib/settings.js'
 
-export default function SettingsModal({ settings, durationLocked, onChange, onClose }) {
+export default function SettingsModal({ settings, onChange, onClose }) {
+  const [minutes, setMinutes] = useState('')
+  const [seconds, setSeconds] = useState('')
+
+  useEffect(() => {
+    const total = settings.matchSeconds
+    setMinutes(String(Math.floor(total / 60)))
+    setSeconds(String(total % 60).padStart(2, '0'))
+  }, [settings.matchSeconds])
+
   useEffect(() => {
     function onKey(event) {
       if (event.key === 'Escape') onClose()
@@ -12,6 +21,11 @@ export default function SettingsModal({ settings, durationLocked, onChange, onCl
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
+
+  function saveDuration(event) {
+    event.preventDefault()
+    onChange({ matchSeconds: parseMatchDuration(minutes, seconds) })
+  }
 
   return (
     <motion.div
@@ -29,9 +43,9 @@ export default function SettingsModal({ settings, durationLocked, onChange, onCl
         animate={{ y: 0, opacity: 1 }}
         transition={{ type: 'spring', stiffness: 300, damping: 28 }}
         onClick={(event) => event.stopPropagation()}
-        className="max-h-full w-full overflow-y-auto rounded-t-3xl border border-white/10 bg-slate-900/95 px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-20px_60px_rgba(0,0,0,0.45)] backdrop-blur"
+        className="max-h-full w-full overflow-y-auto rounded-t-3xl border border-white/10 bg-slate-900/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-20px_60px_rgba(0,0,0,0.45)] backdrop-blur"
       >
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-2 flex items-center justify-between">
           <h2 className="text-xl font-black">{COPY.settings}</h2>
           <button
             type="button"
@@ -43,26 +57,47 @@ export default function SettingsModal({ settings, durationLocked, onChange, onCl
           </button>
         </div>
 
-        <fieldset className="mb-3">
-          <legend className="mb-2 text-sm font-bold text-slate-300">{COPY.duration}</legend>
+        <fieldset className="mb-2">
+          <legend className="mb-1.5 text-sm font-bold text-slate-300">{COPY.duration}</legend>
           <div className="grid grid-cols-3 gap-2">
-            {MATCH_LENGTHS.map((minutes) => (
+            {MATCH_LENGTHS.map((length) => (
               <Choice
-                key={minutes}
-                active={settings.matchMinutes === minutes}
-                onClick={() => onChange({ matchMinutes: minutes })}
+                key={length}
+                active={settings.matchSeconds === length * 60}
+                onClick={() => onChange({ matchSeconds: length * 60 })}
               >
-                {minutes} דק׳
+                {length} דק׳
               </Choice>
             ))}
           </div>
-          {durationLocked && (
-            <p className="mt-2 text-xs font-semibold text-amber-300">{COPY.nextMatch}</p>
-          )}
+          <form className="mt-2" dir="ltr" onSubmit={saveDuration}>
+            <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
+              <DurationField
+                label={COPY.durationMinutes}
+                value={minutes}
+                max={30}
+                onChange={setMinutes}
+              />
+              <span className="flex h-11 items-center text-xl font-black text-slate-300" aria-hidden="true">:</span>
+              <DurationField
+                label={COPY.durationSeconds}
+                value={seconds}
+                max={59}
+                onChange={setSeconds}
+              />
+            </div>
+            <button
+              type="submit"
+              data-testid="save-duration"
+              className="mt-2 h-11 w-full rounded-xl bg-cyan-400 text-sm font-black text-slate-950"
+            >
+              {COPY.saveDuration}
+            </button>
+          </form>
         </fieldset>
 
-        <fieldset className="mb-3">
-          <legend className="mb-2 text-sm font-bold text-slate-300">{COPY.extraSetting}</legend>
+        <fieldset className="mb-2">
+          <legend className="mb-1.5 text-sm font-bold text-slate-300">{COPY.extraSetting}</legend>
           <div className="grid grid-cols-3 gap-2">
             {EXTRA_OPTIONS.map((option) => (
               <Choice
@@ -76,7 +111,7 @@ export default function SettingsModal({ settings, durationLocked, onChange, onCl
           </div>
         </fieldset>
 
-        <div className="mb-3 flex items-center justify-between gap-3 rounded-2xl bg-white/5 px-3 py-2">
+        <div className="mb-2 flex items-center justify-between gap-3 rounded-2xl bg-white/5 px-3 py-1.5">
           <span className="text-sm font-bold">{COPY.voice}</span>
           <button
             type="button"
@@ -89,7 +124,7 @@ export default function SettingsModal({ settings, durationLocked, onChange, onCl
         </div>
 
         <label className="block">
-          <span className="mb-2 flex items-center justify-between text-sm font-bold text-slate-300">
+          <span className="mb-1 flex items-center justify-between text-sm font-bold text-slate-300">
             <span>{COPY.buzzerVolume}</span>
             <span className="tabular-nums text-cyan-200">{Math.round(settings.volume * 100)}%</span>
           </span>
@@ -101,15 +136,40 @@ export default function SettingsModal({ settings, durationLocked, onChange, onCl
             value={Math.round(settings.volume * 100)}
             aria-label={COPY.buzzerVolume}
             onChange={(event) => onChange({ volume: Number(event.target.value) / 100 })}
-            className="h-11 w-full accent-cyan-400"
+            className="h-10 w-full accent-cyan-400"
           />
-          <span className="mt-1 flex justify-between text-xs font-semibold text-slate-400">
+          <span className="flex justify-between text-xs font-semibold text-slate-400">
             <span>{COPY.quiet}</span>
             <span>{COPY.loud}</span>
           </span>
         </label>
       </motion.div>
     </motion.div>
+  )
+}
+
+function DurationField({ label, value, max, onChange }) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-xs font-bold text-slate-400">{label}</span>
+      <input
+        value={value}
+        onChange={(event) => {
+          const digits = event.target.value.replace(/\D/g, '').slice(0, 2)
+          if (digits === '') {
+            onChange('')
+            return
+          }
+          onChange(String(Math.min(max, Number(digits))))
+        }}
+        inputMode="numeric"
+        enterKeyHint="done"
+        autoComplete="off"
+        dir="ltr"
+        aria-label={label}
+        className="h-11 w-full rounded-xl bg-white/10 text-center text-base font-black tabular-nums outline-none focus:ring-2 focus:ring-cyan-300"
+      />
+    </label>
   )
 }
 

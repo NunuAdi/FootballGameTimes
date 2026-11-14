@@ -1,5 +1,6 @@
 export const MATCH_SECONDS = 7 * 60
 export const SPEECH_RATE = 0.85
+export const SPEECH_PITCH = 0.95
 
 export const COPY = {
   appTitle: 'שעון משחק 7 דקות',
@@ -18,6 +19,9 @@ export const COPY = {
   settings: 'הגדרות',
   close: 'סגירה',
   duration: 'משך משחק',
+  durationMinutes: 'דקות',
+  durationSeconds: 'שניות',
+  saveDuration: 'שמור',
   extraSetting: 'זמן הארכה',
   voice: 'קריאות קוליות',
   voiceOn: 'פעיל',
@@ -26,7 +30,6 @@ export const COPY = {
   quiet: 'חלש',
   loud: 'חזק',
   extraAction: 'הארכה',
-  nextMatch: 'אורך המשחק יתעדכן באיפוס הבא',
   readySpeech: 'מוכן',
   reset: 'איפוס',
   resetAria: 'איפוס השעון. לחצו לחיצה ארוכה של שנייה וחצי',

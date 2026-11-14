@@ -100,6 +100,34 @@ export function addMatchTime(state, now, extraMs) {
 }
 
 /**
+ * Move the clock to an exact remaining time and pause.
+ * The match length stays when the target fits. A longer target raises the
+ * length (up to the 30-minute ceiling) so the requested time is what shows.
+ * Landing on a cue second arms the next tick, same as extra time.
+ */
+export function jumpToRemaining(state, remainingMs) {
+  if (!Number.isFinite(remainingMs)) return state
+  const requestedMs = clamp(Math.round(remainingMs / 1000), 0, MAX_DURATION_MS / 1000) * 1000
+  const currentDuration = state.durationMs ?? MATCH_DURATION_MS
+  const durationMs = requestedMs > currentDuration
+    ? clamp(requestedMs, MIN_DURATION_MS, MAX_DURATION_MS)
+    : currentDuration
+  const baseElapsedMs = durationMs - Math.min(requestedMs, durationMs)
+  const displaySeconds = getDisplaySeconds(durationMs - baseElapsedMs)
+  const ended = displaySeconds === 0
+  return {
+    ...state,
+    durationMs,
+    isRunning: false,
+    startedAt: null,
+    baseElapsedMs,
+    lastDisplaySecond: ended ? 0 : (isCueSecond(displaySeconds) ? displaySeconds + 1 : displaySeconds),
+    ended,
+    announced: state.announced.filter((mark) => mark > displaySeconds),
+  }
+}
+
+/**
  * Cue when the displayed second falls from `prev` to `curr`.
  * A jump speaks only the latest relevant cue so stacked alerts stay intelligible.
  */

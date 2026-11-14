@@ -15,6 +15,7 @@ import {
   pauseTimer,
   reconcileState,
   sanitizeState,
+  jumpToRemaining,
   startTimer,
   toggleTimer,
 } from './timer.js'
@@ -113,6 +114,86 @@ test('extra time extends a running match without restarting it', () => {
   assert.equal(getDisplaySeconds(getRemainingMs(extended, 400_000)), 80)
   assert.equal(extended.announced.includes(60), false)
   assert.equal(getElapsedMs(extended, 405_000), 405_000)
+})
+
+function cuesWhileFalling(state) {
+  const heard = []
+  let current = state
+  for (let second = current.lastDisplaySecond - 1; second >= 0; second -= 1) {
+    const cue = nextCue(current.lastDisplaySecond, second)
+    if (cue && !cueAlreadyPlayed(current.announced, cue)) {
+      heard.push(cue.type === 'count' ? cue.second : cue.type)
+      current = { ...current, lastDisplaySecond: second, announced: markCue(current.announced, cue) }
+    } else {
+      current = { ...current, lastDisplaySecond: second }
+    }
+  }
+  return heard
+}
+
+test('jumping to 1:20 pauses a 7-minute match at 01:20 and re-arms every cue', () => {
+  const running = {
+    ...createInitialState(),
+    isRunning: true,
+    startedAt: 4_000,
+    baseElapsedMs: 200_000,
+    lastDisplaySecond: 25,
+    announced: [60, 30, 10, 9, 0],
+  }
+  const jumped = jumpToRemaining(running, 80_000)
+  assert.equal(running.isRunning, true)
+  assert.equal(jumped.isRunning, false)
+  assert.equal(jumped.startedAt, null)
+  assert.equal(jumped.ended, false)
+  assert.equal(jumped.durationMs, MATCH_DURATION_MS)
+  assert.equal(jumped.baseElapsedMs, MATCH_DURATION_MS - 80_000)
+  assert.equal(formatClock(getDisplaySeconds(getRemainingMs(jumped, 9_000))), '01:20')
+  assert.ok(jumped.lastDisplaySecond > 60)
+  assert.equal(jumped.announced.includes(60), false)
+  assert.equal(jumped.announced.includes(30), false)
+  assert.equal(startTimer(jumped, 10_000).isRunning, true)
+  assert.equal(jumpToRemaining({ ...finishMatch(createInitialState()), announced: [0, 60] }, 80_000).ended, false)
+  assert.deepEqual(cuesWhileFalling(jumped), ['minute', 'thirty', 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 'end'])
+})
+
+test('landing on 30, 10, or 0 arms the threshold or ends the match', () => {
+  const atThirty = jumpToRemaining({ ...createInitialState(), announced: [60, 30, 10] }, 30_000)
+  assert.equal(formatClock(getDisplaySeconds(getRemainingMs(atThirty, 0))), '00:30')
+  assert.equal(atThirty.lastDisplaySecond, 31)
+  assert.equal(atThirty.ended, false)
+  assert.equal(atThirty.announced.includes(60), true)
+  assert.equal(atThirty.announced.includes(30), false)
+  assert.deepEqual(nextCue(atThirty.lastDisplaySecond, 30), { type: 'thirty' })
+
+  const atTen = jumpToRemaining(createInitialState(), 10_000)
+  assert.equal(atTen.lastDisplaySecond, 11)
+  assert.equal(atTen.isRunning, false)
+  assert.deepEqual(nextCue(atTen.lastDisplaySecond, 10), { type: 'count', second: 10 })
+
+  const ended = jumpToRemaining(finishMatch(createInitialState()), 0)
+  assert.equal(ended.ended, true)
+  assert.equal(ended.isRunning, false)
+  assert.equal(ended.startedAt, null)
+  assert.equal(ended.lastDisplaySecond, 0)
+  assert.equal(formatClock(getDisplaySeconds(getRemainingMs(ended, 50))), '00:00')
+  assert.equal(startTimer(ended, 50), ended)
+  assert.equal(jumpToRemaining(createInitialState(), -5_000).ended, true)
+})
+
+test('a jump longer than the match shows that exact time, and a huge jump stops at 30 minutes', () => {
+  const raised = jumpToRemaining(createInitialState(60_000), 80_000)
+  assert.equal(raised.durationMs, 80_000)
+  assert.equal(raised.baseElapsedMs, 0)
+  assert.equal(raised.ended, false)
+  assert.equal(formatClock(getDisplaySeconds(getRemainingMs(raised, 1))), '01:20')
+  assert.ok(raised.lastDisplaySecond > 60)
+
+  const capped = jumpToRemaining(createInitialState(), 50 * 60 * 1000)
+  assert.equal(capped.durationMs, 30 * 60 * 1000)
+  assert.equal(formatClock(getDisplaySeconds(getRemainingMs(capped, 0))), '30:00')
+
+  const fresh = createInitialState()
+  assert.equal(jumpToRemaining(fresh, Number.NaN), fresh)
 })
 
 test('extra time after the horn leaves a paused minute and can start again', () => {

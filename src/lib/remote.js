@@ -37,14 +37,25 @@ export function isRemoteEvent(event) {
   return KEY_CODES.has(event.keyCode)
 }
 
+const VOLUME_CODES = new Set([
+  'VolumeUp',
+  'VolumeDown',
+  'AudioVolumeUp',
+  'AudioVolumeDown',
+  'VolumeMute',
+  'AudioVolumeMute',
+])
+
+const VOLUME_KEY_CODES = new Set([173, 174, 175])
+
+export function isVolumeEvent(event) {
+  if (!event) return false
+  if (VOLUME_CODES.has(event.code) || VOLUME_CODES.has(event.key)) return true
+  return VOLUME_KEY_CODES.has(event.keyCode)
+}
+
 export function shouldPreventRemoteDefault(event) {
-  const code = event?.code
-  return code === 'Space'
-    || code === 'Enter'
-    || code === 'NumpadEnter'
-    || code === 'MediaPlayPause'
-    || code === 'MediaPlay'
-    || code === 'MediaPause'
-    || event?.key === ' '
-    || event?.key === 'Enter'
+  if (!isRemoteEvent(event)) return false
+  // Volume and shutter keys must not also change the system volume or activate a focused button.
+  return true
 }

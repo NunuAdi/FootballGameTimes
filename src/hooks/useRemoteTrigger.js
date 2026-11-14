@@ -28,22 +28,22 @@ export function useRemoteTrigger(handler, enabled = true) {
 
     function onKeyUp(event) {
       if (!enabledRef.current || !isRemoteEvent(event)) return
+      if (shouldPreventRemoteDefault(event)) event.preventDefault()
       if (sawDown) {
         sawDown = false
         return
       }
-      if (shouldPreventRemoteDefault(event)) event.preventDefault()
       const timestamp = Date.now()
       if (timestamp - last < REPEAT_GUARD_MS) return
       last = timestamp
       handlerRef.current()
     }
 
-    window.addEventListener('keydown', onKeyDown)
-    window.addEventListener('keyup', onKeyUp)
+    window.addEventListener('keydown', onKeyDown, true)
+    window.addEventListener('keyup', onKeyUp, true)
     return () => {
-      window.removeEventListener('keydown', onKeyDown)
-      window.removeEventListener('keyup', onKeyUp)
+      window.removeEventListener('keydown', onKeyDown, true)
+      window.removeEventListener('keyup', onKeyUp, true)
     }
   }, [])
 }
