@@ -19,6 +19,9 @@ let buzzerBuffer = null
 let buzzerDecode = null
 let buzzerElement = null
 let htmlHornActive = false
+let holdElement = null
+let holdOscillator = null
+let holdGain = null
 const timeouts = new Set()
 export const AUDIO_UNLOCK_KEY = 'fgt-audio-unlocked'
 const audioSettings = {
@@ -123,6 +126,92 @@ function outputNode(audio) {
     output.connect(audio.destination)
   }
   return output
+}
+
+function holdAudioDataUrl() {
+  const sampleRate = 8000
+  const samples = sampleRate
+  const dataSize = samples * 2
+  const buffer = new ArrayBuffer(44 + dataSize)
+  const view = new DataView(buffer)
+  const write = (offset, text) => {
+    for (let i = 0; i < text.length; i += 1) view.setUint8(offset + i, text.charCodeAt(i))
+  }
+  write(0, 'RIFF')
+  view.setUint32(4, 36 + dataSize, true)
+  write(8, 'WAVE')
+  write(12, 'fmt ')
+  view.setUint32(16, 16, true)
+  view.setUint16(20, 1, true)
+  view.setUint16(22, 1, true)
+  view.setUint32(24, sampleRate, true)
+  view.setUint32(28, sampleRate * 2, true)
+  view.setUint16(32, 2, true)
+  view.setUint16(34, 16, true)
+  write(36, 'data')
+  view.setUint32(40, dataSize, true)
+  for (let i = 0; i < samples; i += 1) {
+    const sample = Math.round(Math.sin((i * Math.PI * 2 * 18) / sampleRate) * 8)
+    view.setInt16(44 + i * 2, sample, true)
+  }
+  const bytes = new Uint8Array(buffer)
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return `data:audio/wav;base64,${btoa(binary)}`
+}
+
+function startHoldElement() {
+  if (typeof Audio === 'undefined') return
+  if (!holdElement) {
+    holdElement = new Audio(holdAudioDataUrl())
+    holdElement.loop = true
+    holdElement.preload = 'auto'
+    holdElement.playsInline = true
+    holdElement.setAttribute('playsinline', '')
+    holdElement.muted = false
+    holdElement.volume = 0.001
+  }
+  const attempt = holdElement.play()
+  if (attempt?.catch) attempt.catch(() => {})
+}
+
+function startHoldOscillator() {
+  const audio = getAudioContext()
+  if (holdOscillator) return
+  holdGain = audio.createGain()
+  holdGain.gain.value = 0.00008
+  holdOscillator = audio.createOscillator()
+  holdOscillator.type = 'sine'
+  holdOscillator.frequency.value = 18
+  holdOscillator.connect(holdGain)
+  holdGain.connect(audio.destination)
+  try {
+    holdOscillator.start()
+  } catch {
+    holdOscillator = null
+    holdGain = null
+  }
+}
+
+export function holdMediaSession() {
+  startHoldElement()
+  startHoldOscillator()
+  const session = navigator.mediaSession
+  if (!session) return
+  try {
+    if (window.MediaMetadata) {
+      session.metadata = new window.MediaMetadata({
+        title: 'Football Match Timer',
+        artist: 'TMS Lab',
+        album: 'שעון משחק',
+      })
+    }
+    if (!session.playbackState || session.playbackState === 'none') {
+      session.playbackState = 'paused'
+    }
+  } catch {
+    // iOS can reject metadata until a gesture has occurred.
+  }
 }
 
 function hebrewVoice() {
@@ -510,6 +599,7 @@ export function unlockAudio({ primeSpeech = true } = {}) {
     resumed = Promise.resolve()
   }
   watchHebrewVoices()
+  holdMediaSession()
   if (primeSpeech) speak(COPY.readySpeech)
   else primeSilentSpeech()
   return resumed
@@ -529,6 +619,7 @@ export function resumeAudioForGesture() {
     resumed = Promise.resolve()
   }
   watchHebrewVoices()
+  holdMediaSession()
   primeSilentSpeech()
   return resumed
 }

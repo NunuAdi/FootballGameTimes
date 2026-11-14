@@ -7,7 +7,7 @@ import SettingsModal from './components/SettingsModal.jsx'
 import { useMatchTimer } from './hooks/useMatchTimer.js'
 import { useRemoteTrigger } from './hooks/useRemoteTrigger.js'
 import { useWakeLock } from './hooks/useWakeLock.js'
-import { configureAudio, loadAudioUnlocked, resumeAudioForGesture } from './lib/audio.js'
+import { configureAudio, holdMediaSession, loadAudioUnlocked, resumeAudioForGesture } from './lib/audio.js'
 import { COPY, getStatusLabel } from './lib/hebrew.js'
 import { extraButtonLabel, loadSettings, matchTitle, sanitizeSettings, saveSettings } from './lib/settings.js'
 import { setWakeLockWanted } from './lib/wakeLock.js'
@@ -53,6 +53,7 @@ export default function App() {
       const next = match.activate()
       setAudioReady(true)
       setWakeLockWanted(Boolean(next.isRunning))
+      holdMediaSession()
       if (navigator.mediaSession) navigator.mediaSession.playbackState = next.isRunning ? 'playing' : 'paused'
     })
   }
@@ -62,6 +63,7 @@ export default function App() {
     setAudioReady(true)
     match.reset()
     setWakeLockWanted(false)
+    holdMediaSession()
     if (navigator.mediaSession) navigator.mediaSession.playbackState = 'paused'
   }
 
@@ -71,6 +73,7 @@ export default function App() {
     runAction(() => {
       const next = match.toggle()
       setWakeLockWanted(Boolean(next.isRunning))
+      holdMediaSession()
       if (navigator.mediaSession) navigator.mediaSession.playbackState = next.isRunning ? 'playing' : 'paused'
     })
   }
@@ -85,6 +88,7 @@ export default function App() {
 
   function onSurfaceGesture(event) {
     resumeAudioForGesture()
+    holdMediaSession()
     setAudioReady(true)
     const element = event.target instanceof Element ? event.target : event.target?.parentElement
     const inSettings = Boolean(
