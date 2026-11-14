@@ -115,6 +115,7 @@ export function useMatchTimer(matchSeconds) {
     setAlarm(false)
     navigator.vibrate?.(35)
     commit(createInitialState(durationRef.current * 1000), Date.now())
+    resumeAudioForGesture()
   }, [commit])
 
   const addExtra = useCallback((extraMs) => {

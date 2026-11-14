@@ -7,7 +7,7 @@ import SettingsModal from './components/SettingsModal.jsx'
 import { useMatchTimer } from './hooks/useMatchTimer.js'
 import { useRemoteTrigger } from './hooks/useRemoteTrigger.js'
 import { useWakeLock } from './hooks/useWakeLock.js'
-import { configureAudio, loadAudioUnlocked } from './lib/audio.js'
+import { configureAudio, loadAudioUnlocked, resumeAudioForGesture } from './lib/audio.js'
 import { COPY, getStatusLabel } from './lib/hebrew.js'
 import { extraButtonLabel, loadSettings, matchTitle, sanitizeSettings, saveSettings } from './lib/settings.js'
 import { setWakeLockWanted } from './lib/wakeLock.js'
@@ -53,7 +53,16 @@ export default function App() {
       const next = match.activate()
       setAudioReady(true)
       setWakeLockWanted(Boolean(next.isRunning))
+      if (navigator.mediaSession) navigator.mediaSession.playbackState = next.isRunning ? 'playing' : 'paused'
     })
+  }
+
+  function onReset() {
+    resumeAudioForGesture()
+    setAudioReady(true)
+    match.reset()
+    setWakeLockWanted(false)
+    if (navigator.mediaSession) navigator.mediaSession.playbackState = 'paused'
   }
 
   function onToggle() {
@@ -62,6 +71,7 @@ export default function App() {
     runAction(() => {
       const next = match.toggle()
       setWakeLockWanted(Boolean(next.isRunning))
+      if (navigator.mediaSession) navigator.mediaSession.playbackState = next.isRunning ? 'playing' : 'paused'
     })
   }
 
@@ -74,7 +84,8 @@ export default function App() {
   }
 
   function onSurfaceGesture(event) {
-    if (!audioReady) return
+    resumeAudioForGesture()
+    setAudioReady(true)
     const element = event.target instanceof Element ? event.target : event.target?.parentElement
     const inSettings = Boolean(
       element?.closest?.('[data-testid="settings-dialog"]')
@@ -122,7 +133,7 @@ export default function App() {
             <p className="text-[clamp(0.75rem,2dvh,0.95rem)] font-bold tracking-wide text-cyan-300">{COPY.league}</p>
             <h1 className="text-[clamp(0.95rem,2.5dvh,1.15rem)] font-medium text-slate-100">{matchTitle(match.durationMs)}</h1>
           </div>
-          <ResetButton onReset={match.reset} />
+          <ResetButton onReset={onReset} />
         </header>
 
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-4 pb-1">

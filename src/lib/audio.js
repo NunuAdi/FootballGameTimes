@@ -10,6 +10,7 @@ let speechPrimed = false
 let voicesWatching = false
 let selectedVoice = null
 let speakTimer = 0
+let speechWatchTimer = 0
 let stopBuzzer = null
 let hornGeneration = 0
 let buzzerBytes = null
@@ -79,18 +80,23 @@ function watchHebrewVoices() {
   }
 }
 
+function silentUtterance() {
+  const utterance = new SpeechSynthesisUtterance('\u00a0')
+  utterance.lang = 'he-IL'
+  utterance.volume = 0
+  utterance.rate = 1
+  utterance.pitch = 1
+  return utterance
+}
+
 function primeSilentSpeech() {
-  if (speechPrimed || !audioSettings.speechEnabled) return
   const synth = window.speechSynthesis
   if (!synth) return
   speechPrimed = true
   try {
+    synth.cancel()
     synth.resume()
-    const utterance = new SpeechSynthesisUtterance('\u00a0')
-    utterance.lang = 'he-IL'
-    utterance.volume = 0
-    utterance.rate = 1
-    synth.speak(utterance)
+    synth.speak(silentUtterance())
   } catch {
     speechPrimed = false
   }
@@ -127,7 +133,9 @@ function hebrewVoice() {
 
 function clearSpeakTimer() {
   window.clearTimeout(speakTimer)
+  window.clearTimeout(speechWatchTimer)
   speakTimer = 0
+  speechWatchTimer = 0
 }
 
 export function stopMatchAudio() {
@@ -148,12 +156,36 @@ function later(fn, ms) {
   timeouts.add(id)
 }
 
+function queueUtterance(synth, utterance) {
+  let started = false
+  utterance.onstart = () => {
+    started = true
+    window.clearTimeout(speechWatchTimer)
+    speechWatchTimer = 0
+  }
+  utterance.onerror = () => {
+    window.clearTimeout(speechWatchTimer)
+    speechWatchTimer = 0
+  }
+  utterance.onend = () => {
+    window.clearTimeout(speechWatchTimer)
+    speechWatchTimer = 0
+  }
+  synth.resume()
+  synth.speak(utterance)
+  // Safari can freeze the queue after a long pause. Kick it once, then retry.
+  speechWatchTimer = window.setTimeout(() => {
+    if (started || !synth.speaking && !synth.pending) return
+    synth.resume()
+  }, 280)
+}
+
 export function speak(text, rate = SPEECH_RATE) {
   const synth = window.speechSynthesis
   if (!audioSettings.speechEnabled || !synth || !text) return
   clearSpeakTimer()
   speechPrimed = true
-  synth.resume()
+  try { synth.resume() } catch { /* iOS can throw if the session is not ready */ }
   synth.cancel()
   const utterance = new SpeechSynthesisUtterance(text)
   utterance.lang = 'he-IL'
@@ -163,13 +195,11 @@ export function speak(text, rate = SPEECH_RATE) {
   const voice = hebrewVoice()
   if (voice) utterance.voice = voice
   // iOS drops an utterance spoken in the same turn as cancel().
-  // Voices can arrive during that gap, so the voice is chosen again.
   speakTimer = window.setTimeout(() => {
     const ready = hebrewVoice()
     if (ready) utterance.voice = ready
-    synth.resume()
-    synth.speak(utterance)
-  }, 60)
+    queueUtterance(synth, utterance)
+  }, 80)
 }
 
 function envelope(audio, gain, when, attack, duration, peak) {
@@ -468,35 +498,39 @@ if (typeof window !== 'undefined') {
 }
 
 export function unlockAudio({ primeSpeech = true } = {}) {
-  const audio = getAudioContext()
-  unlocked = true
   persistAudioUnlocked()
-  const resumed = audio.resume()
-  armCustomBuzzer(resumed)
-  resumed.then(() => playTick()).catch(() => {})
-  if (primeSpeech) {
-    speechPrimed = true
-    speak(COPY.readySpeech)
+  unlocked = true
+  let resumed = Promise.resolve()
+  try {
+    const audio = getAudioContext()
+    resumed = audio.resume()
+    armCustomBuzzer(resumed)
+    resumed.then(() => playTick()).catch(() => {})
+  } catch {
+    resumed = Promise.resolve()
   }
   watchHebrewVoices()
+  if (primeSpeech) speak(COPY.readySpeech)
+  else primeSilentSpeech()
   return resumed
 }
 
 // A reloaded page suspends AudioContext until a gesture, even when the overlay stays hidden.
 export function resumeAudioForGesture() {
+  persistAudioUnlocked()
+  unlocked = true
+  let resumed = Promise.resolve()
   try {
     const audio = getAudioContext()
-    unlocked = true
-    const resumed = audio.resume()
+    resumed = audio.resume()
     armCustomBuzzer(resumed)
     resumed.catch(() => {})
-    if (!speechPrimed) primeSilentSpeech()
-    else window.speechSynthesis?.resume?.()
-    watchHebrewVoices()
-    return resumed
   } catch {
-    return Promise.resolve()
+    resumed = Promise.resolve()
   }
+  watchHebrewVoices()
+  primeSilentSpeech()
+  return resumed
 }
 
 export function playMatchCue(cue) {

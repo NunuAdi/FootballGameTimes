@@ -5,11 +5,17 @@ const CODES = new Set([
   'MediaPlayPause',
   'MediaPlay',
   'MediaPause',
+  'MediaStop',
+  'MediaTrackNext',
+  'MediaTrackPrevious',
   'VolumeUp',
   'VolumeDown',
   'AudioVolumeUp',
   'AudioVolumeDown',
+  'VolumeMute',
+  'AudioVolumeMute',
   'Camera',
+  'BrowserBack',
 ])
 
 const KEYS = new Set([
@@ -18,17 +24,20 @@ const KEYS = new Set([
   'MediaPlayPause',
   'MediaPlay',
   'MediaPause',
+  'MediaStop',
   'Play',
   'Pause',
   'VolumeUp',
   'VolumeDown',
   'AudioVolumeUp',
   'AudioVolumeDown',
+  'VolumeMute',
+  'AudioVolumeMute',
   'Camera',
 ])
 
 // Shutter remotes commonly emit Enter, Space, media play/pause, volume, or Camera.
-const KEY_CODES = new Set([13, 27, 32, 174, 175, 179])
+const KEY_CODES = new Set([13, 27, 32, 173, 174, 175, 176, 177, 178, 179])
 
 export function isRemoteEvent(event) {
   if (!event) return false

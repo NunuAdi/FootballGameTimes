@@ -13,6 +13,8 @@ test('bluetooth shutter keys and keyboard aliases toggle the clock', () => {
   assert.equal(isRemoteEvent({ code: '', key: '', keyCode: 175 }), true)
   assert.equal(isRemoteEvent({ code: '', key: '', keyCode: 174 }), true)
   assert.equal(isRemoteEvent({ code: 'Camera', key: 'Camera', keyCode: 27 }), true)
+  assert.equal(isRemoteEvent({ code: 'VolumeMute', key: 'AudioVolumeMute' }), true)
+  assert.equal(isRemoteEvent({ code: 'MediaTrackNext', key: 'MediaTrackNext' }), true)
   assert.equal(isRemoteEvent({ code: 'KeyA', key: 'a', keyCode: 65 }), false)
   assert.equal(isVolumeEvent({ code: 'AudioVolumeDown', key: 'AudioVolumeDown' }), true)
   assert.equal(isVolumeEvent({ code: '', key: '', keyCode: 175 }), true)
