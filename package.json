@@ -1,0 +1,36 @@
+{
+  "name": "football-game-times",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Hebrew RTL 7-minute football match timer for the sideline.",
+  "homepage": "https://nunuadi.github.io/FootballGameTimes",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "oxlint",
+    "preview": "vite preview",
+    "test": "node --test src/lib/timer.test.mjs src/lib/remote.test.mjs src/lib/settings.test.mjs",
+    "icons": "node scripts/generate-icons.mjs",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d dist --nojekyll"
+  },
+  "dependencies": {
+    "@fontsource/rubik": "^5.3.0",
+    "framer-motion": "^14.14.0",
+    "lucide-react": "^1.73.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "gh-pages": "^6.3.0",
+    "oxlint": "^1.90.0",
+    "tailwindcss": "^4.3.5",
+    "vite": "^8.3.6",
+    "vite-plugin-pwa": "^2.0.0"
+  }
+}

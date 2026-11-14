@@ -15,12 +15,15 @@ npm run build
 
 Open the dev server on a phone on the same Wi-Fi via the Network URL Vite prints (`host: true`).
 
-## Deploy on GitHub + Netlify
+## Deploy on GitHub Pages
 
-1. Push this repo to GitHub.
-2. In Netlify: **Add new site → Import from Git**.
-3. Build command: `npm run build`. Publish directory: `dist`.
-4. Deploy. `netlify.toml` already sets the Node version, the SPA fallback, and wake-lock permission.
+The site is published at `https://nunuadi.github.io/FootballGameTimes`. Vite `base` is `/FootballGameTimes/`, so assets, icons, the web manifest, and the service worker resolve under that path.
+
+```bash
+npm run deploy
+```
+
+`predeploy` runs `npm run build`. `deploy` publishes `dist` to the `gh-pages` branch. In the GitHub repo, set Pages to that branch (root).
 
 Install it from the browser: **Add to Home Screen**. The web manifest is Hebrew, RTL, portrait, and `standalone`.
 
