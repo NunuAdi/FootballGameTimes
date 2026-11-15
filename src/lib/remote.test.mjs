@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { isRemoteEvent, isVolumeEvent, MEDIA_SESSION_ACTIONS, shouldPreventRemoteDefault } from './remote.js'
+import { isRemoteEvent, isVolumeEvent, shouldPreventRemoteDefault } from './remote.js'
 
 test('bluetooth shutter keys and keyboard aliases toggle the clock', () => {
   assert.equal(isRemoteEvent({ code: 'Space', key: ' ' }), true)
@@ -28,14 +28,3 @@ test('bluetooth shutter keys and keyboard aliases toggle the clock', () => {
   assert.equal(shouldPreventRemoteDefault({ code: 'KeyA', key: 'a', keyCode: 65 }), false)
 })
 
-test('media session actions cover play, pause, stop, and track skips', () => {
-  assert.deepEqual(MEDIA_SESSION_ACTIONS, [
-    'play',
-    'pause',
-    'stop',
-    'previoustrack',
-    'nexttrack',
-    'seekbackward',
-    'seekforward',
-  ])
-})

@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react'
-import { holdMediaSession, setMediaRemoteHandler } from '../lib/audio.js'
 import { COPY } from '../lib/hebrew.js'
 import { isRemoteEvent, shouldPreventRemoteDefault } from '../lib/remote.js'
 
@@ -44,7 +43,6 @@ export function useRemoteTrigger(handler, enabled = true) {
       const timestamp = Date.now()
       if (timestamp - last < REPEAT_GUARD_MS) return
       last = timestamp
-      holdMediaSession()
       handlerRef.current()
       window.setTimeout(keepFocus, 40)
     }
@@ -79,7 +77,6 @@ export function useRemoteTrigger(handler, enabled = true) {
       capture(event)
     }
 
-    setMediaRemoteHandler(fire)
     document.body.appendChild(catcher)
     keepFocus()
     window.addEventListener('keydown', onKeyDown, OPTIONS)
@@ -90,12 +87,8 @@ export function useRemoteTrigger(handler, enabled = true) {
     document.addEventListener('visibilitychange', keepFocus)
     window.addEventListener('focus', keepFocus)
     window.addEventListener('pointerup', keepFocus)
-    const focusTimer = window.setInterval(() => {
-      if (enabledRef.current) keepFocus()
-    }, 1200)
 
     return () => {
-      window.clearInterval(focusTimer)
       window.removeEventListener('keydown', onKeyDown, OPTIONS)
       window.removeEventListener('keyup', onKeyUp, OPTIONS)
       window.removeEventListener('keypress', onKeyPress, OPTIONS)

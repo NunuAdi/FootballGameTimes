@@ -10,7 +10,7 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "node --test src/lib/timer.test.mjs src/lib/remote.test.mjs src/lib/settings.test.mjs src/lib/speechVoice.test.mjs",
+    "test": "node --test src/lib/timer.test.mjs src/lib/remote.test.mjs src/lib/settings.test.mjs src/lib/audio.test.mjs",
     "icons": "node scripts/generate-icons.mjs",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d dist --nojekyll"

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { isAudioUnlocked, playMatchCue, resumeAudioForGesture, stopMatchAudio, unlockAudio } from '../lib/audio.js'
+import { isAudioUnlocked, playMatchCue, resumeAudioForGesture, stopMatchAudio, syncCountdownAudio, unlockAudio } from '../lib/audio.js'
 import { loadState, saveState } from '../lib/storage.js'
 import {
   addMatchTime,
@@ -55,6 +55,10 @@ export function useMatchTimer(matchSeconds) {
     return markCue(current.announced, cue)
   }, [triggerAlarm])
 
+  const syncAudio = useCallback((next, timestamp) => {
+    syncCountdownAudio(getRemainingMs(next, timestamp), Boolean(next.isRunning) && !next.ended)
+  }, [])
+
   const tick = useCallback((timestamp) => {
     const current = stateRef.current
     const displaySeconds = getDisplaySeconds(getRemainingMs(current, timestamp))
@@ -65,7 +69,8 @@ export function useMatchTimer(matchSeconds) {
     const cue = nextCue(current.lastDisplaySecond, displaySeconds)
     next = { ...next, announced: applyCue(current, cue) }
     commit(next, timestamp)
-  }, [applyCue, commit])
+    syncAudio(next, timestamp)
+  }, [applyCue, commit, syncAudio])
 
   useEffect(() => {
     const onShow = () => tick(Date.now())
@@ -105,8 +110,9 @@ export function useMatchTimer(matchSeconds) {
     if (next === stateRef.current) return stateRef.current
     if (next.isRunning !== stateRef.current.isRunning) navigator.vibrate?.(12)
     commit(next, timestamp)
+    syncAudio(next, timestamp)
     return next
-  }, [commit])
+  }, [commit, syncAudio])
 
   const reset = useCallback(() => {
     stopMatchAudio()
@@ -141,12 +147,13 @@ export function useMatchTimer(matchSeconds) {
       triggerAlarm()
     }
     commit(next, Date.now())
+    syncAudio(stateRef.current, Date.now())
     return stateRef.current
-  }, [commit, triggerAlarm])
+  }, [commit, syncAudio, triggerAlarm])
 
   const activate = useCallback(() => {
     const pending = pendingRef.current
-    unlockAudio({ primeSpeech: !pending })
+    unlockAudio()
     let current = stateRef.current
     if (pending && playMatchCue(pending)) {
       pendingRef.current = null
@@ -167,8 +174,9 @@ export function useMatchTimer(matchSeconds) {
         current = next
       }
     }
+    syncAudio(current, Date.now())
     return current
-  }, [commit, triggerAlarm])
+  }, [commit, syncAudio, triggerAlarm])
 
   const displaySeconds = getDisplaySeconds(getRemainingMs(state, now))
 

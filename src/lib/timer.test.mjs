@@ -46,19 +46,19 @@ test('thresholds match six minutes, thirty seconds, the final ten, and full time
   assert.equal(nextCue(60, 59), null)
   assert.deepEqual(nextCue(31, 30), { type: 'thirty' })
   assert.equal(nextCue(30, 29), null)
-  assert.deepEqual(nextCue(11, 10), { type: 'count', second: 10 })
-  assert.deepEqual(nextCue(2, 1), { type: 'count', second: 1 })
+  assert.deepEqual(nextCue(11, 10), { type: 'countdown' })
+  assert.deepEqual(nextCue(2, 1), { type: 'countdown' })
   assert.deepEqual(nextCue(1, 0), { type: 'end' })
   assert.deepEqual(nextCue(90, 25), { type: 'thirty' })
-  assert.deepEqual(nextCue(90, 8), { type: 'count', second: 8 })
+  assert.deepEqual(nextCue(90, 8), { type: 'countdown' })
   assert.deepEqual(nextCue(90, 0), { type: 'end' })
   assert.equal(nextCue(40, 35), null)
   assert.equal(nextCue(10, 40), null)
 })
 
 test('a cue is announced once and skipped seconds are marked', () => {
-  const marked = markCue([], { type: 'count', second: 8 })
-  assert.equal(cueAlreadyPlayed(marked, { type: 'count', second: 8 }), true)
+  const marked = markCue([], { type: 'countdown' })
+  assert.equal(cueAlreadyPlayed(marked, { type: 'countdown' }), true)
   assert.equal(cueAlreadyPlayed(marked, { type: 'count', second: 10 }), true)
   assert.equal(cueAlreadyPlayed(marked, { type: 'minute' }), true)
   assert.equal(cueAlreadyPlayed(markCue([], { type: 'end' }), { type: 'end' }), true)
@@ -122,7 +122,7 @@ function cuesWhileFalling(state) {
   for (let second = current.lastDisplaySecond - 1; second >= 0; second -= 1) {
     const cue = nextCue(current.lastDisplaySecond, second)
     if (cue && !cueAlreadyPlayed(current.announced, cue)) {
-      heard.push(cue.type === 'count' ? cue.second : cue.type)
+      heard.push(cue.type)
       current = { ...current, lastDisplaySecond: second, announced: markCue(current.announced, cue) }
     } else {
       current = { ...current, lastDisplaySecond: second }
@@ -153,7 +153,7 @@ test('jumping to 1:20 pauses a 7-minute match at 01:20 and re-arms every cue', (
   assert.equal(jumped.announced.includes(30), false)
   assert.equal(startTimer(jumped, 10_000).isRunning, true)
   assert.equal(jumpToRemaining({ ...finishMatch(createInitialState()), announced: [0, 60] }, 80_000).ended, false)
-  assert.deepEqual(cuesWhileFalling(jumped), ['minute', 'thirty', 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 'end'])
+  assert.deepEqual(cuesWhileFalling(jumped), ['minute', 'thirty', 'countdown', 'end'])
 })
 
 test('landing on 30, 10, or 0 arms the threshold or ends the match', () => {
@@ -168,7 +168,7 @@ test('landing on 30, 10, or 0 arms the threshold or ends the match', () => {
   const atTen = jumpToRemaining(createInitialState(), 10_000)
   assert.equal(atTen.lastDisplaySecond, 11)
   assert.equal(atTen.isRunning, false)
-  assert.deepEqual(nextCue(atTen.lastDisplaySecond, 10), { type: 'count', second: 10 })
+  assert.deepEqual(nextCue(atTen.lastDisplaySecond, 10), { type: 'countdown' })
 
   const ended = jumpToRemaining(finishMatch(createInitialState()), 0)
   assert.equal(ended.ended, true)

@@ -88,13 +88,3 @@ export function shouldPreventRemoteDefault(event) {
   // Volume and shutter keys must not also change the system volume or activate a focused button.
   return true
 }
-
-export const MEDIA_SESSION_ACTIONS = [
-  'play',
-  'pause',
-  'stop',
-  'previoustrack',
-  'nexttrack',
-  'seekbackward',
-  'seekforward',
-]

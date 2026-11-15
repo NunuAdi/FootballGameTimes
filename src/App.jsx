@@ -8,7 +8,7 @@ import { useMatchTimer } from './hooks/useMatchTimer.js'
 import { usePullReload } from './hooks/usePullReload.js'
 import { useRemoteTrigger } from './hooks/useRemoteTrigger.js'
 import { useWakeLock } from './hooks/useWakeLock.js'
-import { configureAudio, holdMediaSession, loadAudioUnlocked, resumeAudioForGesture } from './lib/audio.js'
+import { configureAudio, loadAudioUnlocked, preloadCueAudio, resumeAudioForGesture } from './lib/audio.js'
 import { COPY, getStatusLabel } from './lib/hebrew.js'
 import { extraButtonLabel, loadSettings, matchTitle, sanitizeSettings, saveSettings } from './lib/settings.js'
 import { setWakeLockWanted } from './lib/wakeLock.js'
@@ -45,6 +45,10 @@ export default function App() {
   }
 
   useEffect(() => {
+    preloadCueAudio()
+  }, [])
+
+  useEffect(() => {
     document.title = match.ended
       ? `00:00 · ${COPY.finished}`
       : `${match.clockText} · ${COPY.shortTitle}`
@@ -55,7 +59,6 @@ export default function App() {
       const next = match.activate()
       setAudioReady(true)
       setWakeLockWanted(Boolean(next.isRunning))
-      holdMediaSession()
     })
   }
 
@@ -64,7 +67,6 @@ export default function App() {
     setAudioReady(true)
     match.reset()
     setWakeLockWanted(false)
-    holdMediaSession()
   }
 
   function onToggle() {
@@ -73,7 +75,6 @@ export default function App() {
     runAction(() => {
       const next = match.toggle()
       setWakeLockWanted(Boolean(next.isRunning))
-      holdMediaSession()
     })
   }
 
@@ -87,7 +88,6 @@ export default function App() {
 
   function onSurfaceGesture(event) {
     resumeAudioForGesture()
-    holdMediaSession()
     setAudioReady(true)
     const element = event.target instanceof Element ? event.target : event.target?.parentElement
     const inSettings = Boolean(

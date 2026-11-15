@@ -19,7 +19,16 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'auto',
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'buzzer.mp3'],
+      includeAssets: [
+        'favicon.svg',
+        'apple-touch-icon.png',
+        'icon-192.png',
+        'icon-512.png',
+        'icon-maskable-512.png',
+        'sounds/one-minute.mp3',
+        'sounds/thirty-seconds.mp3',
+        'sounds/countdown-end.mp3',
+      ],
       manifest: {
         id: '/FootballGameTimes/',
         name: 'שעון משחק 7 דקות',

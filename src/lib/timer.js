@@ -135,7 +135,7 @@ export function nextCue(prev, curr) {
   if (!Number.isInteger(prev) || !Number.isInteger(curr) || curr === prev) return null
   if (curr > prev) return null
   if (curr === 0) return { type: 'end' }
-  if (curr <= 10) return { type: 'count', second: curr }
+  if (curr > 0 && curr <= 10) return { type: 'countdown' }
   if (prev > 30 && curr <= 30) return { type: 'thirty' }
   if (prev > 60 && curr <= 60) return { type: 'minute' }
   return null
@@ -145,7 +145,7 @@ export function cueAlreadyPlayed(announced, cue) {
   if (!cue) return true
   if (cue.type === 'minute') return announced.includes(60)
   if (cue.type === 'thirty') return announced.includes(30)
-  if (cue.type === 'count') return announced.includes(cue.second)
+  if (cue.type === 'countdown' || cue.type === 'count') return announced.includes(10)
   if (cue.type === 'end') return announced.includes(0)
   return true
 }
@@ -157,10 +157,10 @@ export function markCue(announced, cue) {
     next.add(60)
     next.add(30)
   }
-  if (cue.type === 'count') {
+  if (cue.type === 'countdown' || cue.type === 'count') {
     next.add(60)
     next.add(30)
-    for (let second = cue.second; second <= 10; second += 1) next.add(second)
+    for (let second = 1; second <= 10; second += 1) next.add(second)
   }
   if (cue.type === 'end') {
     next.add(60)
