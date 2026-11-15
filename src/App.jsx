@@ -1,10 +1,11 @@
 import { motion } from 'framer-motion'
-import { CircleStop, Pause, Play, Settings } from 'lucide-react'
+import { CircleStop, Pause, Play, RefreshCw, Settings } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import AudioUnlock from './components/AudioUnlock.jsx'
 import ResetButton from './components/ResetButton.jsx'
 import SettingsModal from './components/SettingsModal.jsx'
 import { useMatchTimer } from './hooks/useMatchTimer.js'
+import { usePullReload } from './hooks/usePullReload.js'
 import { useRemoteTrigger } from './hooks/useRemoteTrigger.js'
 import { useWakeLock } from './hooks/useWakeLock.js'
 import { configureAudio, holdMediaSession, loadAudioUnlocked, resumeAudioForGesture } from './lib/audio.js'
@@ -25,6 +26,7 @@ export default function App() {
   const actionLock = useRef(0)
   const extraLock = useRef(0)
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const pullOffset = usePullReload(!settingsOpen)
 
   function updateSettings(patch) {
     setSettings((current) => {
@@ -54,7 +56,6 @@ export default function App() {
       setAudioReady(true)
       setWakeLockWanted(Boolean(next.isRunning))
       holdMediaSession()
-      if (navigator.mediaSession) navigator.mediaSession.playbackState = next.isRunning ? 'playing' : 'paused'
     })
   }
 
@@ -64,7 +65,6 @@ export default function App() {
     match.reset()
     setWakeLockWanted(false)
     holdMediaSession()
-    if (navigator.mediaSession) navigator.mediaSession.playbackState = 'paused'
   }
 
   function onToggle() {
@@ -74,7 +74,6 @@ export default function App() {
       const next = match.toggle()
       setWakeLockWanted(Boolean(next.isRunning))
       holdMediaSession()
-      if (navigator.mediaSession) navigator.mediaSession.playbackState = next.isRunning ? 'playing' : 'paused'
     })
   }
 
@@ -131,7 +130,24 @@ export default function App() {
         />
       )}
 
-      <section className="relative z-10 flex min-h-0 flex-1 flex-col overflow-hidden">
+      {pullOffset > 6 && (
+        <div
+          className="pointer-events-none absolute inset-x-0 z-40 flex flex-col items-center gap-1 text-cyan-200"
+          style={{
+            top: `calc(${8 + pullOffset * 0.45}px + env(safe-area-inset-top))`,
+            opacity: Math.min(1, pullOffset / 78),
+          }}
+        >
+          <RefreshCw
+            className="h-5 w-5"
+            strokeWidth={2.4}
+            style={{ transform: `rotate(${pullOffset * 2.4}deg)` }}
+          />
+          <span className="text-[11px] font-bold">{COPY.refresh}</span>
+        </div>
+      )}
+
+      <section data-testid="clock-region" className="relative z-10 flex min-h-0 flex-1 flex-col overflow-hidden">
         <header className="flex items-start justify-between gap-2 px-3 pt-[max(0.55rem,env(safe-area-inset-top))] ps-14">
           <div className="min-w-0 pt-1">
             <p className="text-[clamp(0.75rem,2dvh,0.95rem)] font-bold tracking-wide text-cyan-300">{COPY.league}</p>
@@ -162,6 +178,9 @@ export default function App() {
               {wakeStatus === 'unsupported' ? COPY.wakeUnsupported : COPY.wakeDenied}
             </p>
           )}
+          <p className="mt-1 max-w-[22rem] text-center text-[clamp(0.68rem,1.7dvh,0.8rem)] font-semibold leading-snug text-slate-400">
+            {COPY.shutterHint}
+          </p>
         </div>
       </section>
 

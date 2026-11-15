@@ -1,19 +1,10 @@
 import { useEffect, useRef } from 'react'
+import { holdMediaSession, setMediaRemoteHandler } from '../lib/audio.js'
+import { COPY } from '../lib/hebrew.js'
 import { isRemoteEvent, shouldPreventRemoteDefault } from '../lib/remote.js'
-import { holdMediaSession } from '../lib/audio.js'
 
 const REPEAT_GUARD_MS = 300
 const OPTIONS = { capture: true, passive: false }
-const MEDIA_ACTIONS = [
-  'play',
-  'pause',
-  'stop',
-  'previoustrack',
-  'nexttrack',
-  'seekbackward',
-  'seekforward',
-  'seekto',
-]
 
 export function useRemoteTrigger(handler, enabled = true) {
   const handlerRef = useRef(handler)
@@ -27,17 +18,39 @@ export function useRemoteTrigger(handler, enabled = true) {
   useEffect(() => {
     let last = 0
     let sawDown = false
+    const catcher = document.createElement('input')
+    catcher.type = 'text'
+    catcher.inputMode = 'none'
+    catcher.readOnly = true
+    catcher.autocomplete = 'off'
+    catcher.setAttribute('data-testid', 'shutter-catch')
+    catcher.setAttribute('aria-label', COPY.shutterAria)
+    catcher.setAttribute('aria-hidden', 'true')
+    catcher.tabIndex = 0
+    catcher.style.cssText = 'position:fixed;inset:auto 0 -8px 0;height:1px;width:1px;opacity:0;border:0;padding:0;pointer-events:none'
+
+    function inSettings() {
+      return Boolean(document.activeElement?.closest?.('[data-testid="settings-dialog"]'))
+    }
+
+    function keepFocus() {
+      if (!enabledRef.current || inSettings()) return
+      if (document.activeElement === catcher) return
+      try { catcher.focus({ preventScroll: true }) } catch { catcher.focus() }
+    }
 
     function fire() {
+      if (!enabledRef.current) return
       const timestamp = Date.now()
       if (timestamp - last < REPEAT_GUARD_MS) return
       last = timestamp
       holdMediaSession()
       handlerRef.current()
+      window.setTimeout(keepFocus, 40)
     }
 
     function capture(event) {
-      if (!enabledRef.current || !isRemoteEvent(event)) return false
+      if (!isRemoteEvent(event)) return false
       if (shouldPreventRemoteDefault(event)) {
         event.preventDefault()
         event.stopPropagation()
@@ -66,46 +79,32 @@ export function useRemoteTrigger(handler, enabled = true) {
       capture(event)
     }
 
-    function onMedia(event) {
-      if (event?.preventDefault) event.preventDefault()
-      if (event?.stopPropagation) event.stopPropagation()
-      if (!enabledRef.current) return
-      fire()
-    }
-
-    function bindSession() {
-      const session = navigator.mediaSession
-      if (!session?.setActionHandler) return
-      holdMediaSession()
-      for (const action of MEDIA_ACTIONS) {
-        try { session.setActionHandler(action, onMedia) } catch { /* unsupported action */ }
-      }
-      for (const extra of ['togglePlayState', 'toggleplay']) {
-        try { session.setActionHandler(extra, onMedia) } catch { /* not in the spec */ }
-      }
-    }
-
+    setMediaRemoteHandler(fire)
+    document.body.appendChild(catcher)
+    keepFocus()
     window.addEventListener('keydown', onKeyDown, OPTIONS)
     window.addEventListener('keyup', onKeyUp, OPTIONS)
     window.addEventListener('keypress', onKeyPress, OPTIONS)
-    document.addEventListener('keydown', onKeyDown, OPTIONS)
-    document.addEventListener('keyup', onKeyUp, OPTIONS)
-    bindSession()
+    catcher.addEventListener('keydown', onKeyDown)
+    catcher.addEventListener('keyup', onKeyUp)
+    document.addEventListener('visibilitychange', keepFocus)
+    window.addEventListener('focus', keepFocus)
+    window.addEventListener('pointerup', keepFocus)
+    const focusTimer = window.setInterval(() => {
+      if (enabledRef.current) keepFocus()
+    }, 1200)
 
     return () => {
+      window.clearInterval(focusTimer)
       window.removeEventListener('keydown', onKeyDown, OPTIONS)
       window.removeEventListener('keyup', onKeyUp, OPTIONS)
       window.removeEventListener('keypress', onKeyPress, OPTIONS)
-      document.removeEventListener('keydown', onKeyDown, OPTIONS)
-      document.removeEventListener('keyup', onKeyUp, OPTIONS)
-      const session = navigator.mediaSession
-      if (!session?.setActionHandler) return
-      for (const action of MEDIA_ACTIONS) {
-        try { session.setActionHandler(action, null) } catch { /* already cleared */ }
-      }
-      for (const extra of ['togglePlayState', 'toggleplay']) {
-        try { session.setActionHandler(extra, null) } catch { /* unsupported */ }
-      }
+      catcher.removeEventListener('keydown', onKeyDown)
+      catcher.removeEventListener('keyup', onKeyUp)
+      document.removeEventListener('visibilitychange', keepFocus)
+      window.removeEventListener('focus', keepFocus)
+      window.removeEventListener('pointerup', keepFocus)
+      catcher.remove()
     }
   }, [])
 }

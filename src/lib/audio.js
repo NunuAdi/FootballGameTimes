@@ -1,8 +1,9 @@
-import { COPY, SECOND_WORDS, SPEECH_PITCH, SPEECH_RATE } from './hebrew.js'
+import { COPY, SECOND_WORDS, speechTune } from './hebrew.js'
+import { MEDIA_SESSION_ACTIONS } from './remote.js'
 import { selectHebrewMaleVoice } from './speechVoice.js'
 
 const BUZZER_SECONDS = 3
-const BUZZER_URL = `${import.meta.env.BASE_URL}buzzer.mp3`
+const BUZZER_URL = `${import.meta.env?.BASE_URL || '/'}buzzer.mp3`
 let context = null
 let output = null
 let unlocked = false
@@ -22,6 +23,8 @@ let htmlHornActive = false
 let holdElement = null
 let holdOscillator = null
 let holdGain = null
+let holdWatch = 0
+let mediaRemoteHandler = null
 const timeouts = new Set()
 export const AUDIO_UNLOCK_KEY = 'fgt-audio-unlocked'
 const audioSettings = {
@@ -160,6 +163,32 @@ function holdAudioDataUrl() {
   return `data:audio/wav;base64,${btoa(binary)}`
 }
 
+function pinHoldElement(node) {
+  try { window.__fgtHoldAudio = node } catch { /* private mode */ }
+  if (!node.isConnected && document.body) {
+    node.setAttribute('aria-hidden', 'true')
+    node.setAttribute('playsinline', '')
+    node.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-8px;bottom:0'
+    document.body.appendChild(node)
+  }
+}
+
+function keepHoldPlaying() {
+  if (holdElement) {
+    pinHoldElement(holdElement)
+    if (holdElement.paused || holdElement.ended) {
+      const attempt = holdElement.play()
+      if (attempt?.catch) attempt.catch(() => {})
+    }
+  }
+  if (context?.state === 'suspended') context.resume().catch(() => {})
+}
+
+function onHoldInterrupted() {
+  window.setTimeout(keepHoldPlaying, 0)
+  window.setTimeout(keepHoldPlaying, 250)
+}
+
 function startHoldElement() {
   if (typeof Audio === 'undefined') return
   if (!holdElement) {
@@ -167,10 +196,13 @@ function startHoldElement() {
     holdElement.loop = true
     holdElement.preload = 'auto'
     holdElement.playsInline = true
-    holdElement.setAttribute('playsinline', '')
     holdElement.muted = false
     holdElement.volume = 0.001
+    for (const type of ['pause', 'ended', 'stalled', 'suspend', 'waiting', 'emptied', 'error']) {
+      holdElement.addEventListener(type, onHoldInterrupted)
+    }
   }
+  pinHoldElement(holdElement)
   const attempt = holdElement.play()
   if (attempt?.catch) attempt.catch(() => {})
 }
@@ -193,9 +225,26 @@ function startHoldOscillator() {
   }
 }
 
-export function holdMediaSession() {
-  startHoldElement()
-  startHoldOscillator()
+function onMediaRemoteAction(event) {
+  try { event?.preventDefault?.() } catch { /* not a DOM event */ }
+  keepHoldPlaying()
+  bindMediaSessionActions()
+  markMediaSessionPlaying()
+  mediaRemoteHandler?.()
+}
+
+function bindMediaSessionActions() {
+  const session = navigator.mediaSession
+  if (!session?.setActionHandler) return
+  for (const action of MEDIA_SESSION_ACTIONS) {
+    try { session.setActionHandler(action, onMediaRemoteAction) } catch { /* unsupported */ }
+  }
+  for (const extra of ['toggleplay', 'togglePlayState', 'nextrack']) {
+    try { session.setActionHandler(extra, onMediaRemoteAction) } catch { /* not in the spec */ }
+  }
+}
+
+function markMediaSessionPlaying() {
   const session = navigator.mediaSession
   if (!session) return
   try {
@@ -206,12 +255,34 @@ export function holdMediaSession() {
         album: 'שעון משחק',
       })
     }
-    if (!session.playbackState || session.playbackState === 'none') {
-      session.playbackState = 'paused'
-    }
+    session.playbackState = 'playing'
   } catch {
     // iOS can reject metadata until a gesture has occurred.
   }
+}
+
+function watchHoldPlayback() {
+  if (holdWatch) return
+  holdWatch = window.setInterval(keepHoldPlaying, 2000)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') keepHoldPlaying()
+  })
+  window.addEventListener('pageshow', keepHoldPlaying)
+  window.addEventListener('focus', keepHoldPlaying)
+}
+
+export function setMediaRemoteHandler(handler) {
+  mediaRemoteHandler = handler
+  bindMediaSessionActions()
+}
+
+export function holdMediaSession() {
+  startHoldElement()
+  startHoldOscillator()
+  watchHoldPlayback()
+  bindMediaSessionActions()
+  markMediaSessionPlaying()
+  keepHoldPlaying()
 }
 
 function hebrewVoice() {
@@ -269,17 +340,18 @@ function queueUtterance(synth, utterance) {
   }, 280)
 }
 
-export function speak(text, rate = SPEECH_RATE) {
+export function speak(text, rate) {
   const synth = window.speechSynthesis
   if (!audioSettings.speechEnabled || !synth || !text) return
   clearSpeakTimer()
   speechPrimed = true
   try { synth.resume() } catch { /* iOS can throw if the session is not ready */ }
   synth.cancel()
+  const tune = speechTune()
   const utterance = new SpeechSynthesisUtterance(text)
   utterance.lang = 'he-IL'
-  utterance.rate = rate
-  utterance.pitch = SPEECH_PITCH
+  utterance.rate = rate ?? tune.rate
+  utterance.pitch = tune.pitch
   utterance.volume = 1
   const voice = hebrewVoice()
   if (voice) utterance.voice = voice
@@ -629,13 +701,13 @@ export function playMatchCue(cue) {
   resumeContext()
   if (cue.type === 'minute') {
     playDoubleWhistle()
-    later(() => speak(COPY.minute, SPEECH_RATE), 700)
+    later(() => speak(COPY.minute), 700)
   } else if (cue.type === 'thirty') {
     playShortBeep()
-    later(() => speak(COPY.thirty, SPEECH_RATE), 220)
+    later(() => speak(COPY.thirty), 220)
   } else if (cue.type === 'count') {
     playTick()
-    speak(SECOND_WORDS[cue.second], SPEECH_RATE)
+    speak(SECOND_WORDS[cue.second])
   } else if (cue.type === 'end') {
     stopMatchAudio()
     playEndHorn()

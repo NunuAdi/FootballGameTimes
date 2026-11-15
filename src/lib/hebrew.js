@@ -1,6 +1,21 @@
 export const MATCH_SECONDS = 7 * 60
 export const SPEECH_RATE = 0.85
+export const IOS_SPEECH_RATE = 0.88
 export const SPEECH_PITCH = 0.95
+
+export function isAppleMobile() {
+  if (typeof navigator === 'undefined') return false
+  const ua = navigator.userAgent || ''
+  if (/iPad|iPhone|iPod/i.test(ua)) return true
+  return navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1
+}
+
+export function speechTune() {
+  return {
+    rate: isAppleMobile() ? IOS_SPEECH_RATE : SPEECH_RATE,
+    pitch: SPEECH_PITCH,
+  }
+}
 
 export const COPY = {
   appTitle: 'שעון משחק 7 דקות',
@@ -14,6 +29,8 @@ export const COPY = {
   unlock: 'הפעל סאונד / התחל',
   unlockHint: 'לחצו פעם אחת כדי לאפשר צפירה וקריאות בעברית במגרש',
   remoteHint: 'שלט בלוטות׳, מקש רווח או Enter מפעילים ועוצרים',
+  shutterHint: 'שלט תריס: לחצו על כפתור ANDROID. כפתורי הווליום של האייפון לא עוצרים את השעון.',
+  shutterAria: 'קליטת שלט תריס',
   minute: 'דקה לסיום המשחק',
   thirty: 'חצי דקה לסיום',
   settings: 'הגדרות',
@@ -42,6 +59,7 @@ export const COPY = {
   wakeUnsupported: 'הדפדפן לא נועל את המסך — בטלו כיבוי אוטומטי',
   wakeDenied: 'אשרו נעילת מסך כדי שהטלפון לא יכבה',
   timeLeft: 'זמן שנותר',
+  refresh: 'רענון',
 }
 
 /** Feminine Hebrew cardinals — שניות is feminine. */

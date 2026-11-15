@@ -39,6 +39,17 @@ body {
 button {
   font-family: inherit;
   -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+[data-testid="main-button"],
+[data-testid="extra-time"] {
+  touch-action: manipulation;
+  overscroll-behavior: none;
+}
+
+[data-testid="clock-region"] {
+  touch-action: pan-y;
 }
 
 .clock-digits {
